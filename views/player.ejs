@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title><%= title %></title>
+    <link href="https://vjs.zencdn.net/8.10.0/video-js.css" rel="stylesheet" />
+    <link href="https://unpkg.com/boxicons@2.1.4/css/boxicons.min.css" rel="stylesheet" />
+    <link href="/css/player.css" rel="stylesheet" />
+</head>
+<body>
+
+    <div id="bytebox-loader" class="bytebox-fetch-overlay">
+        <div class="loader-content">
+            <i class='bx bx-loader-circle bx-spin'></i>
+            <span>Resolving Bytebox Streams...</span>
+        </div>
+    </div>
+
+    <div class="bytebox-player-wrapper" id="player-container" data-subtitles="<%= subtitles %>">
+        <video 
+            id="bytebox-core-playback" 
+            class="video-js vjs-default-skin vjs-big-play-centered" 
+            controls 
+            preload="auto">
+            <source src="<%= streamUrl %>" type="application/x-mpegURL">
+        </video>
+    </div>
+
+    <script src="https://vjs.zencdn.net/8.10.0/video.min.js"></script>
+    <script>
+        const player = videojs('bytebox-core-playback', {
+            fluid: true,
+            playbackRates: [0.5, 1, 1.25, 1.5, 2],
+            userActions: {
+                hotkeys: function(event) {
+                    if (event.which === 32) { 
+                        if (this.paused()) { this.play(); } else { this.pause(); }
+                    }
+                    if (event.which === 33) { this.currentTime(this.currentTime() + 10); } 
+                    if (event.which === 37) { this.currentTime(this.currentTime() - 10); } 
+                }
+            }
+        });
+
+        player.on('loadeddata', function() {
+            const loader = document.getElementById('bytebox-loader');
+            loader.classList.add('fade-out');
+            setTimeout(() => loader.style.display = 'none', 500);
+        });
+
+        player.on('waiting', function() {
+            const loader = document.getElementById('bytebox-loader');
+            loader.style.display = 'flex';
+            loader.classList.remove('fade-out');
+        });
+
+        player.on('playing', function() {
+            document.getElementById('bytebox-loader').classList.add('fade-out');
+        });
+
+        const container = document.getElementById('player-container');
+        const subtitleData = container.getAttribute('data-subtitles');
+        const tracks = subtitleData ? JSON.parse(subtitleData) : [];
+        
+        tracks.forEach(track => {
+            player.addRemoteTextTrack({
+                kind: 'captions',
+                label: track.label,
+                srclang: track.srclang,
+                src: track.src
+            }, false);
+        });
+    </script>
+</body>
+</html>

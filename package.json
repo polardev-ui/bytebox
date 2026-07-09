@@ -1,0 +1,14 @@
+{
+  "name": "bytebox-backend",
+  "version": "1.0.0",
+  "description": "Ad-Free Headless Stream Extractor Engine for Bytebox",
+  "main": "server.js",
+  "scripts": {
+    "start": "./start.sh"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "playwright": "^1.42.1",
+    "ejs": "^3.1.9"
+  }
+}
