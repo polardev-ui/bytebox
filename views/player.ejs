@@ -5,72 +5,208 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title><%= title %></title>
     <link href="https://vjs.zencdn.net/8.10.0/video-js.css" rel="stylesheet" />
-    <link href="https://unpkg.com/boxicons@2.1.4/css/boxicons.min.css" rel="stylesheet" />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
     <link href="/css/player.css" rel="stylesheet" />
 </head>
 <body>
 
-    <div id="bytebox-loader" class="bytebox-fetch-overlay">
-        <div class="loader-content">
-            <i class='bx bx-loader-circle bx-spin'></i>
-            <span>Resolving Bytebox Streams...</span>
+    <div id="bb-loader" class="bb-overlay">
+        <div class="bb-loader-inner">
+            <div class="bb-spinner"></div>
+            <span id="bb-loading-text">Fetching stream...</span>
         </div>
     </div>
 
-    <div class="bytebox-player-wrapper" id="player-container" data-subtitles="<%= subtitles %>">
-        <video 
-            id="bytebox-core-playback" 
-            class="video-js vjs-default-skin vjs-big-play-centered" 
-            controls 
-            preload="auto">
-            <source src="<%= streamUrl %>" type="application/x-mpegURL">
-        </video>
+    <div id="bb-error" class="bb-overlay bb-error-screen" style="display:none;">
+        <div class="bb-loader-inner">
+            <svg class="bb-error-icon" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                <circle cx="12" cy="12" r="10"/>
+                <line x1="15" y1="9" x2="9" y2="15"/>
+                <line x1="9" y1="9" x2="15" y2="15"/>
+            </svg>
+            <span>Stream unavailable</span>
+            <button class="bb-retry-btn" id="bb-retry">Retry</button>
+        </div>
+    </div>
+
+    <div class="bb-player-wrap" id="bb-player-wrap" style="display:none;">
+        <video
+            id="bb-player"
+            class="video-js vjs-default-skin vjs-big-play-centered"
+            controls
+            preload="auto"
+            crossorigin="anonymous"
+        ></video>
     </div>
 
     <script src="https://vjs.zencdn.net/8.10.0/video.min.js"></script>
     <script>
-        const player = videojs('bytebox-core-playback', {
-            fluid: true,
-            playbackRates: [0.5, 1, 1.25, 1.5, 2],
-            userActions: {
-                hotkeys: function(event) {
-                    if (event.which === 32) { 
-                        if (this.paused()) { this.play(); } else { this.pause(); }
-                    }
-                    if (event.which === 33) { this.currentTime(this.currentTime() + 10); } 
-                    if (event.which === 37) { this.currentTime(this.currentTime() - 10); } 
+        (function() {
+            const loader = document.getElementById('bb-loader');
+            const errorScreen = document.getElementById('bb-error');
+            const playerWrap = document.getElementById('bb-player-wrap');
+            const loadingText = document.getElementById('bb-loading-text');
+            const retryBtn = document.getElementById('bb-retry');
+
+            const mediaId = '<%= id %>';
+            const mediaType = '<%= type %>';
+            const season = '<%= season %>';
+            const episode = '<%= episode %>';
+
+            // Read URL params
+            const params = new URLSearchParams(window.location.search);
+            const autoPlay = params.get('autoPlay') === 'true';
+            const startAt = parseInt(params.get('startAt')) || 0;
+            const theme = params.get('theme');
+            const defaultSub = params.get('sub');
+            const forcedServer = params.get('server') || '';
+
+            let player = null;
+
+            function setAccent(color) {
+                if (!color) return;
+                const hex = color.replace('#', '');
+                const r = parseInt(hex.substr(0, 2), 16);
+                const g = parseInt(hex.substr(2, 2), 16);
+                const b = parseInt(hex.substr(4, 2), 16);
+                document.documentElement.style.setProperty('--bb-accent', `rgb(${r},${g},${b})`);
+                document.documentElement.style.setProperty('--bb-accent-dim', `rgba(${r},${g},${b},0.15)`);
+            }
+            setAccent(theme);
+
+            function showLoader(text) {
+                loadingText.textContent = text || 'Fetching stream...';
+                loader.style.display = 'flex';
+                loader.style.opacity = '1';
+                errorScreen.style.display = 'none';
+            }
+
+            function hideLoader() {
+                loader.style.opacity = '0';
+                setTimeout(() => loader.style.display = 'none', 400);
+            }
+
+            function showError() {
+                loader.style.display = 'none';
+                errorScreen.style.display = 'flex';
+                errorScreen.style.opacity = '1';
+            }
+
+            async function loadStream() {
+                showLoader('Fetching stream...');
+                errorScreen.style.display = 'none';
+                playerWrap.style.display = 'none';
+
+                let apiEndpoint = `/api/stream/${mediaType}/${mediaId}`;
+                if (mediaType === 'tv') apiEndpoint += `/${season}/${episode}`;
+                if (forcedServer) apiEndpoint += `?server=${forcedServer}`;
+
+                try {
+                    loadingText.textContent = 'Extracting source...';
+                    const response = await fetch(apiEndpoint);
+
+                    if (!response.ok) throw new Error('Stream extraction failed');
+
+                    const data = await response.json();
+                    loadingText.textContent = 'Loading player...';
+
+                    initPlayer(data);
+                } catch (err) {
+                    console.error('[ByteBox]', err);
+                    showError();
                 }
             }
-        });
 
-        player.on('loadeddata', function() {
-            const loader = document.getElementById('bytebox-loader');
-            loader.classList.add('fade-out');
-            setTimeout(() => loader.style.display = 'none', 500);
-        });
+            function initPlayer(data) {
+                if (player) {
+                    player.dispose();
+                    player = null;
+                }
 
-        player.on('waiting', function() {
-            const loader = document.getElementById('bytebox-loader');
-            loader.style.display = 'flex';
-            loader.classList.remove('fade-out');
-        });
+                playerWrap.style.display = 'block';
 
-        player.on('playing', function() {
-            document.getElementById('bytebox-loader').classList.add('fade-out');
-        });
+                const vjsOptions = {
+                    fluid: true,
+                    responsive: true,
+                    playbackRates: [0.5, 1, 1.25, 1.5, 2],
+                    sources: [{ src: data.streamUrl, type: 'application/x-mpegURL' }],
+                };
 
-        const container = document.getElementById('player-container');
-        const subtitleData = container.getAttribute('data-subtitles');
-        const tracks = subtitleData ? JSON.parse(subtitleData) : [];
-        
-        tracks.forEach(track => {
-            player.addRemoteTextTrack({
-                kind: 'captions',
-                label: track.label,
-                srclang: track.srclang,
-                src: track.src
-            }, false);
-        });
+                player = videojs('bb-player', vjsOptions);
+
+                // Add subtitles
+                if (data.subtitles && data.subtitles.length > 0) {
+                    data.subtitles.forEach(track => {
+                        player.addRemoteTextTrack(track, false);
+                    });
+
+                    // Set default subtitle
+                    if (defaultSub) {
+                        setTimeout(() => {
+                            const tracks = player.textTracks();
+                            for (let i = 0; i < tracks.length; i++) {
+                                if (tracks[i].language && tracks[i].language.startsWith(defaultSub)) {
+                                    tracks[i].mode = 'showing';
+                                }
+                            }
+                        }, 1000);
+                    }
+                }
+
+                // Start at specific time
+                if (startAt > 0) {
+                    player.ready(() => {
+                        player.currentTime(startAt);
+                    });
+                }
+
+                // Auto play
+                if (autoPlay) {
+                    player.ready(() => {
+                        player.play().catch(() => {});
+                    });
+                }
+
+                // Hotkeys
+                player.on('keydown', function(e) {
+                    if (e.which === 32) { // Space
+                        e.preventDefault();
+                        if (this.paused()) this.play(); else this.pause();
+                    }
+                    if (e.which === 37) this.currentTime(this.currentTime() - 10); // Left
+                    if (e.which === 39) this.currentTime(this.currentTime() + 10); // Right
+                    if (e.which === 38) this.volume(this.volume() + 0.1); // Up
+                    if (e.which === 40) this.volume(this.volume() - 0.1); // Down
+                    if (e.which === 70) { // F
+                        if (this.isFullscreen()) this.exitFullscreen(); else this.requestFullscreen();
+                    }
+                });
+
+                // Transitions
+                player.on('loadeddata', () => {
+                    hideLoader();
+                    playerWrap.style.opacity = '0';
+                    playerWrap.style.filter = 'blur(10px)';
+                    playerWrap.style.transform = 'scale(0.98)';
+                    requestAnimationFrame(() => {
+                        playerWrap.style.transition = 'opacity 0.5s ease, filter 0.5s ease, transform 0.5s ease';
+                        playerWrap.style.opacity = '1';
+                        playerWrap.style.filter = 'blur(0)';
+                        playerWrap.style.transform = 'scale(1)';
+                    });
+                });
+
+                player.on('waiting', () => showLoader('Buffering...'));
+                player.on('playing', () => hideLoader());
+                player.on('error', () => showError());
+            }
+
+            // Retry button
+            retryBtn.addEventListener('click', loadStream);
+
+            // Start
+            loadStream();
+        })();
     </script>
 </body>
 </html>

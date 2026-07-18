@@ -1,14 +1,15 @@
 {
-  "name": "bytebox-backend",
-  "version": "1.0.0",
-  "description": "Ad-Free Headless Stream Extractor Engine for Bytebox",
+  "name": "bytebox",
+  "version": "2.0.0",
+  "description": "ByteBox — TMDB Video Player API",
   "main": "server.js",
   "scripts": {
-    "start": "./start.sh"
+    "start": "node server.js",
+    "dev": "node --watch server.js"
   },
   "dependencies": {
-    "express": "^4.19.2",
-    "playwright": "^1.42.1",
-    "ejs": "^3.1.9"
+    "express": "^4.21.0",
+    "playwright": "^1.48.0",
+    "ejs": "^3.1.10"
   }
 }

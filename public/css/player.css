@@ -1,161 +1,129 @@
-body, html {
-    margin: 0;
-    padding: 0;
-    width: 100%;
-    height: 100%;
-    background-color: #030304;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-    overflow: hidden;
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+:root{
+    --bb-accent:#fff;
+    --bb-accent-dim:rgba(255,255,255,0.15);
+    --bb-bg:#000;
+    --bb-bg-elevated:#0a0a0a;
+    --bb-text:#fff;
+    --bb-text-dim:#888;
+    --bb-border:#222;
+}
+html,body{
+    width:100%;height:100%;
+    background:var(--bb-bg);
+    font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+    overflow:hidden;
+    color:var(--bb-text);
+    -webkit-font-smoothing:antialiased;
 }
 
-.bytebox-player-wrapper {
-    width: 100%;
-    height: 100%;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    opacity: 0;
-    filter: blur(15px);
-    transform: translateY(30px);
-    animation: byteboxReveal 0.9s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+/* ── OVERLAY ── */
+.bb-overlay{
+    position:fixed;inset:0;z-index:9999;
+    background:var(--bb-bg);
+    display:flex;justify-content:center;align-items:center;
+    transition:opacity 0.4s ease;
+}
+.bb-overlay[style*="opacity: 0"]{pointer-events:none}
+.bb-loader-inner{text-align:center;display:flex;flex-direction:column;align-items:center;gap:16px}
+.bb-loader-inner span{
+    font-size:0.85rem;color:var(--bb-text-dim);
+    text-transform:uppercase;letter-spacing:1px;font-weight:500;
 }
 
-@keyframes byteboxReveal {
-    to {
-        opacity: 1;
-        filter: blur(0);
-        transform: translateY(0);
-    }
+/* ── SPINNER ── */
+.bb-spinner{
+    width:36px;height:36px;
+    border:2px solid var(--bb-border);
+    border-top-color:var(--bb-accent);
+    border-radius:50%;
+    animation:bbSpin 0.8s linear infinite;
+}
+@keyframes bbSpin{to{transform:rotate(360deg)}}
+
+/* ── ERROR ── */
+.bb-error-icon{color:var(--bb-accent);opacity:0.6;margin-bottom:8px}
+.bb-retry-btn{
+    margin-top:12px;padding:8px 24px;
+    background:var(--bb-accent);color:var(--bb-bg);
+    border:none;border-radius:6px;cursor:pointer;
+    font-size:0.85rem;font-weight:600;font-family:inherit;
+    transition:box-shadow 0.3s ease;
+}
+.bb-retry-btn:hover{box-shadow:0 0 20px var(--bb-accent-dim)}
+
+/* ── PLAYER ── */
+.bb-player-wrap{
+    width:100%;height:100%;
+    display:flex;justify-content:center;align-items:center;
 }
 
-.bytebox-fetch-overlay {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background-color: #050507;
-    z-index: 9999;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    transition: opacity 0.5s ease, filter 0.5s ease;
+/* ── VIDEOJS OVERRIDES ── */
+.video-js{
+    width:100%!important;height:100%!important;
+    background-color:#000!important;
+    font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif!important;
+}
+.video-js .vjs-control-bar{
+    background:linear-gradient(transparent,rgba(0,0,0,0.9))!important;
+    height:4em!important;
+    padding:0 8px;
+}
+.video-js .vjs-play-progress{background:var(--bb-accent)!important}
+.video-js .vjs-load-progress div{background:rgba(255,255,255,0.15)!important}
+.video-js .vjs-slider{background:rgba(255,255,255,0.1)!important}
+.video-js .vjs-play-control .vjs-icon-placeholder::before{font-size:1.6em}
+
+/* Volume slider */
+.video-js .vjs-volume-level{background:var(--bb-accent)!important}
+
+/* Big play button */
+.video-js .vjs-big-play-button{
+    background:var(--bb-accent-dim)!important;
+    border:2px solid var(--bb-accent)!important;
+    border-radius:50%!important;
+    width:72px!important;height:72!important;
+    line-height:68px!important;
+    font-size:2.5em!important;
+    transition:background 0.3s ease,transform 0.3s ease!important;
+}
+.video-js .vjs-big-play-button:hover{
+    background:var(--bb-accent)!important;
+    transform:scale(1.05);
+}
+.video-js .vjs-big-play-button:hover .vjs-icon-placeholder:before{color:#000!important}
+.video-js .vjs-icon-placeholder:before{color:var(--bb-accent)!important}
+
+/* Menu / settings */
+.video-js .vjs-menu-content{
+    background:var(--bb-bg-elevated)!important;
+    border:1px solid var(--bb-border)!important;
+    border-radius:8px!important;
+}
+.video-js .vjs-menu-item{
+    padding:8px 14px!important;
+    font-size:0.85rem!important;
+    transition:background 0.2s ease,color 0.2s ease;
+}
+.video-js .vjs-menu-item:hover{
+    background:var(--bb-accent-dim)!important;
+    color:var(--bb-accent)!important;
+}
+.video-js .vjs-menu-item.vjs-selected{
+    background:var(--bb-accent)!important;
+    color:var(--bb-bg)!important;
 }
 
-.bytebox-fetch-overlay.fade-out {
-    opacity: 0;
-    filter: blur(10px);
-    pointer-events: none;
+/* Subtitles */
+.video-js .vjs-text-track-display{bottom:4.5em!important}
+.video-js .vjs-text-track-cue{
+    background:rgba(0,0,0,0.8)!important;
+    color:#fff!important;
+    font-size:1.1rem!important;
+    border-radius:4px;
+    padding:4px 10px!important;
+    text-shadow:0 1px 3px rgba(0,0,0,0.9);
 }
 
-.loader-content {
-    text-align: center;
-    color: #ffffff;
-}
-
-.loader-content i {
-    font-size: 4rem;
-    color: #eab308; 
-    margin-bottom: 12px;
-}
-
-.loader-content span {
-    display: block;
-    font-size: 0.95rem;
-    letter-spacing: 1px;
-    text-transform: uppercase;
-    opacity: 0.8;
-}
-
-.video-js .vjs-icon-placeholder::before {
-    font-family: 'boxicons' !important;
-    font-weight: normal;
-    font-style: normal;
-    font-variant: normal;
-    line-height: 1;
-    display: inline-block;
-    text-transform: none;
-    speak: none;
-    -webkit-font-smoothing: antialiased;
-}
-
-/* Remapping Component Icons to Boxicons Strings */
-.video-js .vjs-play-control .vjs-icon-placeholder::before { content: '\ea1c'; font-size: 1.8em; } /* bx-play */
-.video-js .vjs-play-control.vjs-playing .vjs-icon-placeholder::before { content: '\e9fd'; } /* bx-pause */
-
-.video-js .vjs-mute-control .vjs-icon-placeholder::before { content: '\eb13'; font-size: 1.5em; } /* bx-volume-full */
-.video-js .vjs-mute-control.vjs-vol-0 .vjs-icon-placeholder::before { content: '\eb15'; } /* bx-volume-mute */
-
-.video-js .vjs-subs-caps-button .vjs-icon-placeholder::before { content: '\ea3e'; font-size: 1.5em; } /* bx-captions */
-.video-js .vjs-playback-rate .vjs-icon-placeholder::before { content: '\eaec'; font-size: 1.6em; } /* bx-tachometer */
-.video-js .vjs-fullscreen-control .vjs-icon-placeholder::before { content: '\e9eb'; font-size: 1.4em; } /* bx-fullscreen */
-
-/* VideoJS Component Dark Matrix Styling */
-.video-js {
-    background-color: #000000 !important;
-}
-
-.video-js .vjs-control-bar {
-    background: linear-gradient(transparent, rgba(5, 5, 7, 0.95)) !important;
-    height: 4.8em !important;
-    align-items: center;
-}
-
-/* Custom Overlay Interface Subtitles Popup Layout Styling */
-.video-js .vjs-text-track-display {
-    bottom: 5.5em !important;
-}
-
-.video-js .vjs-text-track-cue {
-    background-color: rgba(0, 0, 0, 0.75) !important;
-    color: #ffffff !important;
-    font-family: inherit !important;
-    font-size: 1.25rem !important;
-    border-radius: 6px;
-    padding: 6px 12px !important;
-    text-shadow: 0 2px 4px rgba(0,0,0,0.8);
-}
-
-/* Progress Slider Custom Theme Track Alignment */
-.video-js .vjs-play-progress {
-    background-color: #eab308 !important;
-}
-
-.video-js .vjs-load-progress div {
-    background: rgba(255, 255, 255, 0.2) !important;
-}
-
-.video-js .vjs-slider {
-    background-color: rgba(255, 255, 255, 0.1) !important;
-}
-
-/* Premium Settings Popup Selection Menus Custom Styles */
-.video-js .vjs-menu-button-popup .vjs-menu {
-    bottom: 4.5em !important;
-}
-
-.video-js .vjs-menu-content {
-    background-color: #0d0e12 !important;
-    border: 1px solid rgba(255, 255, 255, 0.08) !important;
-    border-radius: 8px !important;
-    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5) !important;
-    padding: 6px 0 !important;
-}
-
-.video-js .vjs-menu-item {
-    padding: 8px 14px !important;
-    font-size: 0.85rem !important;
-    text-transform: capitalize !important;
-    transition: background 0.2s ease, color 0.2s ease;
-}
-
-.video-js .vjs-menu-item:hover {
-    background-color: rgba(234, 179, 8, 0.15) !important;
-    color: #eab308 !important;
-}
-
-.video-js .vjs-menu-item.vjs-selected {
-    background-color: #eab308 !important;
-    color: #000000 !important;
-    font-weight: bold;
-}
+/* Tooltip */
+.video-js .vjs-tooltip{background:var(--bb-bg-elevated)!important;border:1px solid var(--bb-border)!important;border-radius:4px}

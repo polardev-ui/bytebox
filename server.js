@@ -1,115 +1,159 @@
 const express = require('express');
 const { chromium } = require('playwright');
 const path = require('path');
+const vidsrc = require('./providers/vidsrc');
+const cinesrc = require('./providers/cinesrc');
+const vidfast = require('./providers/vidfast');
+
 const app = express();
 const PORT = process.env.PORT || 8080;
+
+// CORS — allow Vercel frontend and any origin for embeds
+app.use((req, res, next) => {
+    const origin = req.headers.origin || '*';
+    res.header('Access-Control-Allow-Origin', origin);
+    res.header('Access-Control-Allow-Methods', 'GET, OPTIONS');
+    res.header('Access-Control-Allow-Headers', 'Content-Type');
+    res.header('Access-Control-Allow-Credentials', 'true');
+    if (req.method === 'OPTIONS') return res.sendStatus(204);
+    next();
+});
 
 app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, 'views'));
 app.use(express.static(path.join(__dirname, 'public')));
 
-async function extractDirectStream(id, type = 'movie', season = '', episode = '') {
-    const browser = await chromium.launch({ 
+const PROVIDERS = [
+    { name: 'VidSrc', fn: vidsrc.extract },
+    { name: 'CineSrc', fn: cinesrc.extract },
+    { name: 'VidFast', fn: vidfast.extract },
+];
+
+async function extractStream(id, type = 'movie', season = '', episode = '', forcedServer = '') {
+    const browser = await chromium.launch({
         headless: true,
         args: [
-            '--no-sandbox', 
+            '--no-sandbox',
             '--disable-setuid-sandbox',
             '--disable-dev-shm-usage',
-            '--disable-accelerated-2d-canvas',
-            '--disable-gpu'
-        ]
+            '--disable-blink-features=AutomationControlled',
+            '--disable-infobars',
+            '--window-size=1280,720',
+        ],
     });
-    
-    const context = await browser.newContext({
-        userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36'
-    });
-    const page = await context.newPage();
-    
-    let targetStreamUrl = null;
-    let subtitleTracks = [];
 
-    let embedUrl = `https://vidsrc.to/embed/${type}/${id}`;
-    if (type === 'tv') {
-        embedUrl += `/${season}/${episode}`;
-    }
+    const context = await browser.newContext({
+        userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+        viewport: { width: 1280, height: 720 },
+        deviceScaleFactor: 1,
+        hasTouch: false,
+    });
+
+    await context.route('**/*', (route) => {
+        const url = route.request().url();
+        if (/adsystem|popads|analytics|doubleclick|googlesyndication|adroll|adsrv|adnxs|exoclick|trafficjunky/.test(url)) {
+            return route.abort();
+        }
+        route.continue();
+    });
+
+    await context.addInitScript(() => {
+        Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+        delete navigator.__proto__.webdriver;
+    });
+
+    const page = await context.newPage();
+    const result = { streamUrl: null, subtitles: [], provider: null };
 
     try {
-        await page.route('**/*', async (route) => {
-            const url = route.request().url();
-            
-            if (url.includes('.m3u8') || url.includes('/master.json') || url.includes('playlist.list')) {
-                if (!url.includes('subtitles')) {
-                    targetStreamUrl = url;
+        if (forcedServer) {
+            const idx = parseInt(forcedServer, 10) - 1;
+            if (idx >= 0 && idx < PROVIDERS.length) {
+                const r = await PROVIDERS[idx].fn(page, id, type, season, episode);
+                if (r.streamUrl) {
+                    result.streamUrl = r.streamUrl;
+                    result.subtitles = r.subtitles;
+                    result.provider = PROVIDERS[idx].name;
                 }
             }
-            
-            if (url.includes('.vtt') || url.includes('.srt')) {
-                subtitleTracks.push({
-                    label: `Track ${subtitleTracks.length + 1}`,
-                    src: url,
-                    srclang: 'en'
-                });
-            }
+        } else {
+            const tasks = PROVIDERS.map(async (prov) => {
+                const p = await context.newPage();
+                try {
+                    const r = await prov.fn(p, id, type, season, episode);
+                    return r.streamUrl ? { ...r, provider: prov.name } : null;
+                } catch {
+                    return null;
+                }
+            });
 
-            if (url.includes('adsystem') || url.includes('popads') || url.includes('analytics')) {
-                return route.abort();
+            const winner = await Promise.any(tasks);
+            if (winner) {
+                result.streamUrl = winner.streamUrl;
+                result.subtitles = winner.subtitles || [];
+                result.provider = winner.provider;
             }
-            
-            route.continue();
-        });
-
-        await page.goto(embedUrl, { waitUntil: 'networkidle', timeout: 15000 });
-        
-        const playButton = await page.$('.play-btn, #player, .vjs-big-play-button');
-        if (playButton) {
-            await playButton.click().catch(() => {});
         }
-        
-        await page.waitForTimeout(3000);
-
     } catch (err) {
-        console.error("[Bytebox Scraper Error]:", err.message);
+        console.error('[ByteBox] Extraction error:', err.message);
     } finally {
         await browser.close();
     }
 
-    return { streamUrl: targetStreamUrl, subtitles: subtitleTracks };
+    return result;
 }
 
-app.get('/embed/movie/:id', async (req, res) => {
-    const mediaId = req.params.id;
-    console.log(`[Bytebox API] Extracting clean assets for Movie: ${mediaId}`);
-    
-    const media = await extractDirectStream(mediaId, 'movie');
+// ── Routes ──
 
-    if (!media.streamUrl) {
-        return res.status(404).send("Error: Unable to safely isolate direct clean stream components.");
-    }
-
+app.get('/embed/movie/:id', (req, res) => {
     res.render('player', {
-        title: `Bytebox - Movie ${mediaId}`,
-        streamUrl: media.streamUrl,
-        subtitles: JSON.stringify(media.subtitles)
+        title: `ByteBox — Movie`,
+        id: req.params.id,
+        type: 'movie',
+        season: '',
+        episode: '',
     });
 });
 
-app.get('/embed/tv/:id/:season/:episode', async (req, res) => {
+app.get('/embed/tv/:id/:season/:episode', (req, res) => {
     const { id, season, episode } = req.params;
-    console.log(`[Bytebox API] Extracting clean assets for TV: ${id} (S${season}E${episode})`);
-    
-    const media = await extractDirectStream(id, 'tv', season, episode);
-
-    if (!media.streamUrl) {
-        return res.status(404).send("Error: Unable to safely isolate direct clean stream components.");
-    }
-
     res.render('player', {
-        title: `Bytebox - S${season}E${episode}`,
-        streamUrl: media.streamUrl,
-        subtitles: JSON.stringify(media.subtitles)
+        title: `ByteBox — S${season}E${episode}`,
+        id,
+        type: 'tv',
+        season,
+        episode,
     });
 });
+
+app.get('/embed/tv/:id', (req, res) => {
+    res.render('player', {
+        title: `ByteBox — TV Show`,
+        id: req.params.id,
+        type: 'tv',
+        season: '1',
+        episode: '1',
+    });
+});
+
+app.get('/api/stream/movie/:id', async (req, res) => {
+    const server = req.query.server || '';
+    const media = await extractStream(req.params.id, 'movie', '', '', server);
+    if (!media.streamUrl) return res.status(404).json({ error: 'Stream not found' });
+    res.json(media);
+});
+
+app.get('/api/stream/tv/:id/:season/:episode', async (req, res) => {
+    const { id, season, episode } = req.params;
+    const server = req.query.server || '';
+    const media = await extractStream(id, 'tv', season, episode, server);
+    if (!media.streamUrl) return res.status(404).json({ error: 'Stream not found' });
+    res.json(media);
+});
+
+// Health check
+app.get('/health', (req, res) => res.json({ status: 'ok' }));
 
 app.listen(PORT, () => {
-    console.log(`Bytebox Node.js Engine successfully operational on port ${PORT}`);
+    console.log(`[ByteBox] Server running on port ${PORT}`);
 });
